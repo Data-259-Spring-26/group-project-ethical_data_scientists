@@ -272,6 +272,35 @@
         .cv-high .team-name { color: #92400e; }
         .cv-extreme .team-name { color: #991b1b; }
 
+        .game-placeholder {
+            position: relative;
+            background: #f9fafb;
+            border: 2px dashed #d1d5db;
+            border-radius: 6px;
+            overflow: hidden;
+            cursor: default;
+            box-shadow: none;
+            margin: 8px 0;
+            min-height: 70px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .game-placeholder:hover {
+            border-color: #d1d5db;
+            box-shadow: none;
+            transform: none;
+        }
+
+        .placeholder-text {
+            color: #9ca3af;
+            font-size: 0.75em;
+            font-style: italic;
+            text-align: center;
+            padding: 10px;
+        }
+
         .center-section {
             display: flex;
             flex-direction: column;
@@ -587,11 +616,99 @@
             renderStats();
         }
 
+        function organizeByMatchups(roundData) {
+            // This function reorganizes games so that parent-child relationships are correct
+            // A Second Round game should come right after its two First Round games
+
+            function findParentGames(childGame, parentRound) {
+                const childTeams = [childGame.favorite, childGame.underdog];
+                const parents = [];
+
+                // Find exactly one parent game for each team in the child game
+                for (const team of childTeams) {
+                    for (const parent of parentRound) {
+                        const parentTeams = [parent.favorite, parent.underdog];
+                        // Check if this parent contains the team AND hasn't been added yet
+                        if (parentTeams.includes(team) && !parents.includes(parent)) {
+                            parents.push(parent);
+                            break; // Found parent for this team, move to next team
+                        }
+                    }
+                }
+
+                return parents;
+            }
+
+            function organizeRoundPair(childRound, parentRound) {
+                const organized = [];
+                const usedParents = new Set();
+
+                for (const child of childRound) {
+                    const parents = findParentGames(child, parentRound);
+
+                    // Each child should have exactly 2 parents
+                    // Add them in order, ensuring we have pairs
+                    const startLen = organized.length;
+
+                    for (const parent of parents) {
+                        if (!usedParents.has(parent)) {
+                            organized.push(parent);
+                            usedParents.add(parent);
+                        }
+                    }
+
+                    // If we only added 1 parent, we need a placeholder to complete the pair
+                    const added = organized.length - startLen;
+                    if (added === 1) {
+                        organized.push(null); // Placeholder for missing game
+                    } else if (added === 0 && parents.length === 0) {
+                        // No parents found - add two placeholders
+                        organized.push(null, null);
+                    }
+                }
+
+                // Add any remaining parents that weren't matched at the end
+                for (const parent of parentRound) {
+                    if (!usedParents.has(parent)) {
+                        organized.push(parent);
+                    }
+                }
+
+                return organized;
+            }
+
+            // Build the bracket from later rounds backwards to ensure proper ordering
+            const result = {
+                'Championship': roundData['Championship'],
+                'Final Four': roundData['Final Four'],
+                'Elite Eight': roundData['Elite Eight'],
+                'Sweet 16': roundData['Sweet 16'],
+                'Second': roundData['Second'],
+                'First': roundData['First']
+            };
+
+            // Reorganize each round based on the next round's matchups
+            if (result['Final Four'].length > 0) {
+                result['Elite Eight'] = organizeRoundPair(result['Final Four'], result['Elite Eight']);
+            }
+            if (result['Elite Eight'].length > 0) {
+                result['Sweet 16'] = organizeRoundPair(result['Elite Eight'], result['Sweet 16']);
+            }
+            if (result['Sweet 16'].length > 0) {
+                result['Second'] = organizeRoundPair(result['Sweet 16'], result['Second']);
+            }
+            if (result['Second'].length > 0) {
+                result['First'] = organizeRoundPair(result['Second'], result['First']);
+            }
+
+            return result;
+        }
+
         function renderBracket() {
             const bracket = document.getElementById('bracket');
             const headerContainer = document.getElementById('rounds-header');
             const canvas = document.getElementById('lines-canvas');
-            
+
             // Clear existing content except canvas
             Array.from(bracket.children).forEach(child => {
                 if (child.id !== 'lines-canvas') {
@@ -613,11 +730,14 @@
                 'Championship': filteredData.filter(d => d.round === 'Championship').sort((a, b) => a.position - b.position)
             };
 
-            // Split points
-            const halfFirst = Math.ceil(roundData['First'].length / 2);
-            const halfSecond = Math.ceil(roundData['Second'].length / 2);
-            const halfSweet = Math.ceil(roundData['Sweet 16'].length / 2);
-            const halfElite = Math.ceil(roundData['Elite Eight'].length / 2);
+            // Reorganize rounds to properly match parent-child game relationships
+            const organizedRounds = organizeByMatchups(roundData);
+
+            // Split points after reorganization
+            const halfFirst = Math.ceil(organizedRounds['First'].length / 2);
+            const halfSecond = Math.ceil(organizedRounds['Second'].length / 2);
+            const halfSweet = Math.ceil(organizedRounds['Sweet 16'].length / 2);
+            const halfElite = Math.ceil(organizedRounds['Elite Eight'].length / 2);
 
             // Create headers that match bracket structure
             const headerLeft = document.createElement('div');
@@ -661,20 +781,20 @@
             const leftHalf = document.createElement('div');
             leftHalf.className = 'bracket-half left';
 
-            createRound(leftHalf, roundData['First'].slice(0, halfFirst), 'left-r1');
-            createRound(leftHalf, roundData['Second'].slice(0, halfSecond), 'left-r2');
-            createRound(leftHalf, roundData['Sweet 16'].slice(0, halfSweet), 'left-r3');
-            createRound(leftHalf, roundData['Elite Eight'].slice(0, halfElite), 'left-r4');
+            createRound(leftHalf, organizedRounds['First'].slice(0, halfFirst), 'left-r1');
+            createRound(leftHalf, organizedRounds['Second'].slice(0, halfSecond), 'left-r2');
+            createRound(leftHalf, organizedRounds['Sweet 16'].slice(0, halfSweet), 'left-r3');
+            createRound(leftHalf, organizedRounds['Elite Eight'].slice(0, halfElite), 'left-r4');
 
             // CENTER
             const center = document.createElement('div');
             center.className = 'center-section';
 
-            if (roundData['Final Four'].length > 0) {
-                center.appendChild(createGameBox(roundData['Final Four'][0], 'ff-1'));
+            if (organizedRounds['Final Four'].length > 0) {
+                center.appendChild(createGameBox(organizedRounds['Final Four'][0], 'ff-1'));
             }
 
-            if (roundData['Championship'].length > 0) {
+            if (organizedRounds['Championship'].length > 0) {
                 const champWrapper = document.createElement('div');
                 champWrapper.className = 'championship-wrapper';
                 
@@ -683,22 +803,22 @@
                 label.textContent = 'CHAMPION';
                 champWrapper.appendChild(label);
                 
-                champWrapper.appendChild(createGameBox(roundData['Championship'][0], 'champ'));
+                champWrapper.appendChild(createGameBox(organizedRounds['Championship'][0], 'champ'));
                 center.appendChild(champWrapper);
             }
 
-            if (roundData['Final Four'].length > 1) {
-                center.appendChild(createGameBox(roundData['Final Four'][1], 'ff-2'));
+            if (organizedRounds['Final Four'].length > 1) {
+                center.appendChild(createGameBox(organizedRounds['Final Four'][1], 'ff-2'));
             }
 
             // RIGHT SIDE
             const rightHalf = document.createElement('div');
             rightHalf.className = 'bracket-half right';
 
-            createRound(rightHalf, roundData['First'].slice(halfFirst), 'right-r1');
-            createRound(rightHalf, roundData['Second'].slice(halfSecond), 'right-r2');
-            createRound(rightHalf, roundData['Sweet 16'].slice(halfSweet), 'right-r3');
-            createRound(rightHalf, roundData['Elite Eight'].slice(halfElite), 'right-r4');
+            createRound(rightHalf, organizedRounds['First'].slice(halfFirst), 'right-r1');
+            createRound(rightHalf, organizedRounds['Second'].slice(halfSecond), 'right-r2');
+            createRound(rightHalf, organizedRounds['Sweet 16'].slice(halfSweet), 'right-r3');
+            createRound(rightHalf, organizedRounds['Elite Eight'].slice(halfElite), 'right-r4');
 
             bracket.appendChild(leftHalf);
             bracket.appendChild(center);
@@ -713,12 +833,34 @@
             roundDiv.className = 'round';
             roundDiv.setAttribute('data-round-id', roundId);
 
-            games.forEach((game, idx) => {
+            // Calculate if we need placeholders to make complete pairs
+            const gamesWithPlaceholders = [...games];
+
+            // If we have an odd number of games, add a placeholder to make pairs
+            if (gamesWithPlaceholders.length % 2 !== 0) {
+                gamesWithPlaceholders.push(null); // null represents a placeholder
+            }
+
+            gamesWithPlaceholders.forEach((game, idx) => {
                 const gameId = `${roundId}-g${idx}`;
-                roundDiv.appendChild(createGameBox(game, gameId));
+                if (game === null) {
+                    roundDiv.appendChild(createPlaceholderBox(gameId));
+                } else {
+                    roundDiv.appendChild(createGameBox(game, gameId));
+                }
             });
 
             container.appendChild(roundDiv);
+        }
+
+        function createPlaceholderBox(gameId) {
+            const placeholderDiv = document.createElement('div');
+            placeholderDiv.className = 'game-placeholder';
+            placeholderDiv.setAttribute('data-game-id', gameId);
+            placeholderDiv.innerHTML = `
+                <div class="placeholder-text">Game Not Available</div>
+            `;
+            return placeholderDiv;
         }
 
         function createGameBox(game, gameId) {
@@ -787,11 +929,11 @@
         function drawRoundConnection(fromRoundId, toRoundId, side, ctx, bracket) {
             const fromRoundEl = document.querySelector(`[data-round-id="${fromRoundId}"]`);
             const toRoundEl = document.querySelector(`[data-round-id="${toRoundId}"]`);
-            
+
             if (!fromRoundEl || !toRoundEl) return;
 
-            const fromGames = fromRoundEl.querySelectorAll('.game');
-            const toGames = toRoundEl.querySelectorAll('.game');
+            const fromGames = fromRoundEl.querySelectorAll('.game, .game-placeholder');
+            const toGames = toRoundEl.querySelectorAll('.game, .game-placeholder');
 
             toGames.forEach((toGame, toIdx) => {
                 const fromIdx1 = toIdx * 2;
@@ -799,13 +941,17 @@
 
                 if (fromIdx1 < fromGames.length && fromIdx2 < fromGames.length) {
                     drawConnection(fromGames[fromIdx1], fromGames[fromIdx2], toGame, side, ctx, bracket);
+                } else if (fromIdx1 < fromGames.length || fromIdx2 < fromGames.length) {
+                    // Handle case where only one game exists - connect through placeholder
+                    const existingGame = fromIdx1 < fromGames.length ? fromGames[fromIdx1] : fromGames[fromIdx2];
+                    drawSingleConnection(existingGame, toGame, side, ctx, bracket);
                 }
             });
         }
 
         function drawConnection(game1, game2, nextGame, side, ctx, bracket) {
             const bracketRect = bracket.getBoundingClientRect();
-            
+
             const g1Rect = game1.getBoundingClientRect();
             const g2Rect = game2.getBoundingClientRect();
             const nRect = nextGame.getBoundingClientRect();
@@ -831,22 +977,47 @@
             }
 
             ctx.beginPath();
-            
+
             // Horizontal from game1
             ctx.moveTo(g1X, g1Y);
             ctx.lineTo(midX, g1Y);
-            
+
             // Vertical connector
             ctx.lineTo(midX, g2Y);
-            
+
             // Horizontal from game2
             ctx.lineTo(g2X, g2Y);
-            
+
             // Line from midpoint to next game
             const midY = (g1Y + g2Y) / 2;
             ctx.moveTo(midX, midY);
             ctx.lineTo(nX, nY);
-            
+
+            ctx.stroke();
+        }
+
+        function drawSingleConnection(fromGame, toGame, side, ctx, bracket) {
+            const bracketRect = bracket.getBoundingClientRect();
+
+            const fromRect = fromGame.getBoundingClientRect();
+            const toRect = toGame.getBoundingClientRect();
+
+            const fromY = fromRect.top - bracketRect.top + fromRect.height / 2;
+            const toY = toRect.top - bracketRect.top + toRect.height / 2;
+
+            let fromX, toX;
+
+            if (side === 'left') {
+                fromX = fromRect.right - bracketRect.left;
+                toX = toRect.left - bracketRect.left;
+            } else {
+                fromX = fromRect.left - bracketRect.left;
+                toX = toRect.right - bracketRect.left;
+            }
+
+            ctx.beginPath();
+            ctx.moveTo(fromX, fromY);
+            ctx.lineTo(toX, toY);
             ctx.stroke();
         }
 
