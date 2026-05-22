@@ -30,16 +30,17 @@ def load_and_prepare_data():
 def create_histogram(df):
     """Create grouped bar chart showing average CV by round and gender."""
 
-    # Map round names to standardized format
+    # Map round names to standardized tournament format
     round_mapping = {
-        'First': '1st Round',
-        'Second': '2nd Round',
-        'Third': '3rd Round',
-        'Fourth': '4th Round',
-        'Elite Eight': '3rd Round',
-        'Sweet Sixteen': '3rd Round',
-        'Final Four': '4th Round',
-        'Championship': '4th Round'
+        'First': 'Round of 64',
+        'Second': 'Round of 32',
+        'Sweet 16': 'Sweet Sixteen',
+        'Third': 'Sweet Sixteen',
+        'Sweet Sixteen': 'Sweet Sixteen',
+        'Fourth': 'Elite Eight',
+        'Elite Eight': 'Elite Eight',
+        'Final Four': 'Final Four',
+        'Championship': 'Championship'
     }
 
     df['Round_Standardized'] = df['Round'].map(round_mapping)
@@ -51,7 +52,7 @@ def create_histogram(df):
     avg_cv_by_round = df.groupby(['category', 'Round_Standardized'])['avg_combined_cv'].mean().reset_index()
 
     # Prepare data for plotting
-    rounds = ['1st Round', '2nd Round', '3rd Round', '4th Round']
+    rounds = ['Round of 64', 'Round of 32', 'Sweet Sixteen', 'Elite Eight', 'Final Four', 'Championship']
     mens_data = []
     womens_data = []
 
@@ -73,7 +74,7 @@ def create_histogram(df):
     x = np.arange(len(rounds))
     width = 0.35
 
-    fig, ax = plt.subplots(figsize=(12, 7))
+    fig, ax = plt.subplots(figsize=(14, 7))
 
     bars1 = ax.bar(x - width/2, mens_data, width, label="Men's", color='#4472C4', alpha=0.8)
     bars2 = ax.bar(x + width/2, womens_data, width, label="Women's", color='#ED7D31', alpha=0.8)
@@ -84,7 +85,7 @@ def create_histogram(df):
     ax.set_title('Volatility (CV) Comparison: Men\'s vs Women\'s March Madness by Round',
                  fontsize=14, fontweight='bold', pad=20)
     ax.set_xticks(x)
-    ax.set_xticklabels(rounds)
+    ax.set_xticklabels(rounds, rotation=15, ha='right')
     ax.legend(fontsize=11)
     ax.grid(axis='y', alpha=0.3, linestyle='--')
 
